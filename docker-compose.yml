@@ -1,0 +1,72 @@
+version: "3.9"
+
+services:
+  # Sample Flask App
+  app:
+    build: ./app
+    container_name: sample-app
+    ports:
+      - "5000:5000"
+    environment:
+      - JAEGER_AGENT_HOST=jaeger
+      - JAEGER_AGENT_PORT=6831
+    volumes:
+      - ./logs:/var/log/app   # mount logs folder for Promtail
+    depends_on:
+      - jaeger
+
+  # Prometheus
+  prometheus:
+    image: prom/prometheus
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+
+  # Grafana
+  grafana:
+    image: grafana/grafana
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    depends_on:
+      - prometheus
+      - loki
+      - jaeger
+    volumes:
+      - grafana-storage:/var/lib/grafana
+
+  # Loki (Logs)
+  loki:
+    image: grafana/loki:2.9.0
+    container_name: loki
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+
+  # Promtail (Log shipper)
+  promtail:
+    image: grafana/promtail:2.9.0
+    container_name: promtail
+    volumes:
+      - ./promtail-config.yml:/etc/promtail/config.yml
+      - ./logs:/var/log/app   # corrected mount path
+    command: -config.file=/etc/promtail/config.yml
+    depends_on:
+      - loki
+
+  # Jaeger (Tracing)
+  jaeger:
+    image: jaegertracing/all-in-one:1.58
+    container_name: jaeger
+    ports:
+      - "16686:16686"   # Jaeger UI
+      - "6831:6831/udp" # Jaeger agent (UDP)
+
+volumes:
+  grafana-storage:
+
